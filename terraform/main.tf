@@ -1,5 +1,6 @@
 provider "kubernetes" {
-  config_path = "~/.kube/config"
+  config_path    = pathexpand("~/.kube/config")
+  config_context = "kind-secure-scan-cluster"
 }
 
 resource "kubernetes_namespace" "secure_scan" {
@@ -107,17 +108,17 @@ resource "kubernetes_ingress_v1" "site" {
   metadata {
     name      = "secure-site-ingress"
     namespace = kubernetes_namespace.secure_scan.metadata[0].name
-    annotations = {
-      "kubernetes.io/ingress.class" = "nginx"
-    }
   }
 
   spec {
+    ingress_class_name = "nginx"
+
     rule {
       host = "secure-scan.local"
       http {
         path {
           path = "/"
+          path_type = "Prefix"
           backend {
             service {
               name = kubernetes_service.site.metadata[0].name
