@@ -3,7 +3,7 @@ provider "kubernetes" {
   config_context = "kind-secure-scan-cluster"
 }
 
-resource "kubernetes_namespace" "secure_scan" {
+resource "kubernetes_namespace_v1" "secure_scan" {
   metadata {
     name = "secure-scan"
   }
@@ -12,7 +12,7 @@ resource "kubernetes_namespace" "secure_scan" {
 resource "kubernetes_deployment" "site" {
   metadata {
     name      = "secure-site"
-    namespace = kubernetes_namespace.secure_scan.metadata[0].name
+    namespace = kubernetes_namespace_v1.secure_scan.metadata[0].name
     labels = {
       app = "secure-site"
     }
@@ -81,6 +81,36 @@ resource "kubernetes_deployment" "site" {
             initial_delay_seconds = 3
             period_seconds        = 3
           }
+
+          volume_mount {
+            name       = "tmp"
+            mount_path = "/tmp"
+          }
+
+          volume_mount {
+            name       = "nginx-cache"
+            mount_path = "/var/cache/nginx"
+          }
+
+          volume_mount {
+            name       = "nginx-run"
+            mount_path = "/var/run"
+          }
+        }
+
+        volume {
+          name = "tmp"
+          empty_dir {}
+        }
+
+        volume {
+          name = "nginx-cache"
+          empty_dir {}
+        }
+
+        volume {
+          name = "nginx-run"
+          empty_dir {}
         }
       }
     }
@@ -90,7 +120,7 @@ resource "kubernetes_deployment" "site" {
 resource "kubernetes_service" "site" {
   metadata {
     name      = "secure-site-service"
-    namespace = kubernetes_namespace.secure_scan.metadata[0].name
+    namespace = kubernetes_namespace_v1.secure_scan.metadata[0].name
   }
   spec {
     selector = {
@@ -107,7 +137,7 @@ resource "kubernetes_service" "site" {
 resource "kubernetes_ingress_v1" "site" {
   metadata {
     name      = "secure-site-ingress"
-    namespace = kubernetes_namespace.secure_scan.metadata[0].name
+    namespace = kubernetes_namespace_v1.secure_scan.metadata[0].name
   }
 
   spec {

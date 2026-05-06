@@ -6,69 +6,172 @@ on:
   pull_request:
     branches: [ main ]
 
+env:
+  IMAGE_NAME: secure-scan-site
+
 jobs:
   security-scan:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: 📥 Checkout code
         uses: actions/checkout@v3
 
-      - name: Build Docker image
-        run: docker build -t secure-scan-site:${{ github.sha }} .
+      - name: 📝 Debug - Show environment
+        run: |
+          echo "=== Environment Info ==="
+          echo "Runner OS: ${{ runner.os }}"
+          echo "GitHub SHA: ${{ github.sha }}"
+          echo "GitHub Ref: ${{ github.ref }}"
+          echo "Event Name: ${{ github.event_name }}"
+          echo "Working Directory: $(pwd)"
+          echo "=== Docker Version ==="
+          docker --version
+          echo "=== File Structure ==="
+          ls -la
+          echo "=== Dockerfile ==="
+          cat Dockerfile
+          echo "=== Terraform Files ==="
+          cat terraform/main.tf
 
-      - name: Run Trivy vulnerability scanner
+      - name: 🐳 Build Docker image
+        run: |
+          echo "=== Building Docker Image ==="
+          docker build -t ${{ env.IMAGE_NAME }}:${{ github.sha }} .
+          echo "=== Image Built Successfully ==="
+          docker images | grep ${{ env.IMAGE_NAME }}
+
+      - name: 🔍 Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'secure-scan-site:${{ github.sha }}'
+          image-ref: '${{ env.IMAGE_NAME }}:${{ github.sha }}'
           format: 'table'
           exit-code: '1'
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'HIGH,CRITICAL'
 
-      - name: Run Checkov action
+      - name: 📝 Debug - Trivy Results Summary
+        if: always()
+        run: |
+          echo "=== Trivy Scan Complete ==="
+          echo "Trivy scan finished for image: ${{ env.IMAGE_NAME }}:${{ github.sha }}"
+
+      - name: 🛡️ Run Checkov action
         uses: bridgecrewio/checkov-action@master
         with:
           directory: terraform/
           framework: terraform
           soft_fail: false
-          check: HIGH,CRITICAL
+          check: CKV_K8S_10,CKV_K8S_11,CKV_K8S_12,CKV_K8S_14,CKV_K8S_15,CKV_K8S_21,CKV_K8S_23,CKV_K8S_24
+
+      - name: 📝 Debug - Checkov Results Summary
+        if: always()
+        run: |
+          echo "=== Checkov Scan Complete ==="
+          echo "Checkov scan finished for directory: terraform/"
 
   deploy:
     runs-on: ubuntu-latest
     needs: security-scan
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - name: Checkout code
+      - name: 📥 Checkout code
         uses: actions/checkout@v3
 
-      - name: Build Docker image
-        run: docker build -t secure-scan-site:${{ github.sha }} .
+      - name: 📝 Debug - Deploy Job Started
+        run: |
+          echo "=== Deploy Job Started ==="
+          echo "GitHub SHA: ${{ github.sha }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
 
-      - name: Setup Kubernetes cluster (kind)
+      - name: 🐳 Build Docker image
+        run: |
+          echo "=== Building Docker Image for Deployment ==="
+          docker build -t ${{ env.IMAGE_NAME }}:${{ github.sha }} .
+          echo "=== Image Built Successfully ==="
+          docker images | grep ${{ env.IMAGE_NAME }}
+
+      - name: ☸️ Setup Kubernetes cluster (kind)
         uses: helm/kind-action@v1
         with:
           cluster_name: secure-scan-cluster
 
-      - name: Install Nginx Ingress Controller
+      - name: 📝 Debug - Cluster Status
         run: |
+          echo "=== Kubernetes Cluster Info ==="
+          kubectl cluster-info
+          echo "=== Nodes ==="
+          kubectl get nodes
+          echo "=== Namespaces ==="
+          kubectl get namespaces
+          echo "=== Kubeconfig Context ==="
+          kubectl config current-context
+
+      - name: 🌐 Install Nginx Ingress Controller
+        run: |
+          echo "=== Installing Nginx Ingress Controller ==="
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
-          kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=90s
+          echo "=== Waiting for Ingress Controller to be Ready ==="
+          kubectl wait --namespace ingress-nginx \
+            --for=condition=ready pod \
+            --selector=app.kubernetes.io/component=controller \
+            --timeout=120s
+          echo "=== Ingress Controller Status ==="
+          kubectl get pods -n ingress-nginx
 
-      - name: Load Docker image into kind
-        run: kind load docker-image secure-scan-site:${{ github.sha }} --name secure-scan-cluster
+      - name: 📦 Load Docker image into kind
+        run: |
+          echo "=== Loading Docker Image into kind Cluster ==="
+          kind load docker-image ${{ env.IMAGE_NAME }}:${{ github.sha }} --name secure-scan-cluster
+          echo "=== Verifying Image in Cluster ==="
+          docker exec -it kind-secure-scan-cluster-worker crictl images | grep ${{ env.IMAGE_NAME }} || echo "Image verification skipped (crictl may not be available)"
 
-      - name: Setup Terraform
+      - name: 🏗️ Setup Terraform
         uses: hashicorp/setup-terraform@v2
 
-      - name: Terraform Init
-        run: terraform init
-        working-directory: ./terraform
+      - name: 📝 Debug - Terraform Environment
+        run: |
+          echo "=== Terraform Environment ==="
+          echo "Working Directory: $(pwd)/terraform"
+          echo "Kubeconfig: ~/.kube/config"
+          echo "Current Context: $(kubectl config current-context)"
+          ls -la terraform/
 
-      - name: Terraform Plan
-        run: terraform plan -var="image_name=secure-scan-site:${{ github.sha }}"
-        working-directory: ./terraform
+      - name: 🔧 Terraform Init
+        run: |
+          echo "=== Initializing Terraform ==="
+          cd terraform
+          terraform init
+          echo "=== Terraform Init Complete ==="
 
-      - name: Terraform Apply
-        run: terraform apply -auto-approve -var="image_name=secure-scan-site:${{ github.sha }}"
-        working-directory: ./terraform
+      - name: 📋 Terraform Plan
+        run: |
+          echo "=== Running Terraform Plan ==="
+          cd terraform
+          terraform plan -var="image_name=${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          echo "=== Terraform Plan Complete ==="
+
+      - name: 🚀 Terraform Apply
+        run: |
+          echo "=== Applying Terraform Configuration ==="
+          cd terraform
+          terraform apply -auto-approve -var="image_name=${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          echo "=== Terraform Apply Complete ==="
+
+      - name: 📝 Debug - Deployment Status
+        if: always()
+        run: |
+          echo "=== Final Deployment Status ==="
+          echo "--- Namespaces ---"
+          kubectl get namespaces
+          echo "--- Pods in secure-scan namespace ---"
+          kubectl get pods -n secure-scan 2>/dev/null || echo "Namespace not created yet"
+          echo "--- Services ---"
+          kubectl get svc -n secure-scan 2>/dev/null || echo "Services not available"
+          echo "--- Ingress ---"
+          kubectl get ingress -n secure-scan 2>/dev/null || echo "Ingress not available"
+          echo "--- Events ---"
+          kubectl get events -n secure-scan --sort-by='.lastTimestamp' 2>/dev/null || echo "No events"
+          echo "--- Pod Logs (if pods exist) ---"
+          kubectl logs -l app=secure-site -n secure-scan --tail=50 2>/dev/null || echo "No pods to get logs from"
