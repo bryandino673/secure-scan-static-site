@@ -325,19 +325,17 @@ kubectl describe pod -n secure-scan -l app=secure-site
 **Important:** Always clean up when you're done to free resources!
 
 ```bash
-# Option 1: Destroy Terraform-managed resources only
+# Step 1: Destroy Terraform-managed resources (namespace, deployment, service, ingress)
 cd terraform
 terraform destroy -auto-approve -var="image_name=secure-scan-site:latest"
 
-# Option 2: Delete the entire namespace (removes all resources inside it)
-kubectl delete namespace secure-scan
-
-# Option 3: Delete the entire kind cluster (nuclear option)
+# Step 2: Delete the entire kind cluster (removes everything including ingress-nginx namespace)
 kind delete cluster --name secure-scan-cluster
-
-# Option 4: Delete the Ingress Controller namespace
-kubectl delete namespace ingress-nginx
 ```
+
+> **Note:** `terraform destroy` removes the `secure-scan` namespace and all resources inside it.
+> `kind delete cluster` removes the entire cluster including the `ingress-nginx` namespace.
+> No need to manually delete namespaces with `kubectl` - Terraform and kind handle cleanup.
 
 ### Deployment
 The project is configured to deploy via GitHub Actions. Only if all security gates pass will Terraform apply the changes to your Kubernetes cluster.
