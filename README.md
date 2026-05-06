@@ -2,7 +2,9 @@
 
 A high-security static website deployment pipeline designed with a DevSecOps mindset. This project refuses to ship if any "High" or "Critical" security vulnerabilities are detected in the container image or infrastructure code.
 
-## 🏗️ Architecture
+##  Architecture
+
+### CI/CD Pipeline Flow
 
 ```mermaid
 graph TD
@@ -20,7 +22,201 @@ graph TD
     H --> I[https://secure-scan.local]
 ```
 
-## 🛠️ Tech Stack
+### System Architecture
+
+```mermaid
+flowchart TB
+    subgraph "Development"
+        DEV[Developer] --> PUSH[Git Push]
+    end
+    
+    subgraph "CI/CD Pipeline"
+        PUSH --> TRIGGER[GitHub Actions Trigger]
+        TRIGGER --> BUILD[Build Docker Image]
+        BUILD --> TRIVY[Trivy Scan]
+        TRIVY --> CHECKOV[Checkov Scan]
+    end
+    
+    subgraph "Security Gates"
+        TRIVY --> GATE1{Vulnerabilities?}
+        CHECKOV --> GATE2{Misconfigurations?}
+        GATE1 -->|HIGH/CRITICAL| BLOCK[❌ Block Pipeline]
+        GATE2 -->|Failed Checks| BLOCK
+        GATE1 -->|Pass| PASS1[✅ Pass]
+        GATE2 -->|Pass| PASS2[✅ Pass]
+    end
+    
+    subgraph "Deployment"
+        PASS1 --> DEPLOY{Both Pass?}
+        PASS2 --> DEPLOY
+        DEPLOY -->|Yes| KIND[Create K8s Cluster<br/>(kind)]
+        KIND --> INGRESS[Install Ingress<br/>Controller]
+        INGRESS --> TF[Terraform Apply]
+        TF --> K8S[Kubernetes Resources]
+    end
+    
+    subgraph "Runtime"
+        K8S --> NS[Namespace: secure-scan]
+        NS --> DEPLOYMENT[Deployment: secure-site]
+        DEPLOYMENT --> POD[Pod: nginx container]
+        POD --> SVC[Service: ClusterIP]
+        SVC --> ING[Ingress: secure-scan.local]
+    end
+    
+    style BLOCK fill:#ff6b6b,stroke:#c92a2a,color:#fff
+    style DEPLOY fill:#51cf66,stroke:#2f9e44,color:#fff
+```
+
+### Kubernetes Resource Flow
+
+```mermaid
+flowchart LR
+    subgraph "External"
+        CLIENT[Client Browser]
+    end
+    
+    subgraph "Kubernetes Cluster"
+        ING[Ingress Controller<br/>nginx]
+        SVC[Service<br/>ClusterIP:80]
+        POD[Pod<br/>nginx:alpine]
+    end
+    
+    CLIENT -->|secure-scan.local| ING
+    ING --> SVC
+    SVC --> POD
+    
+    subgraph "Security Context"
+        POD --> SEC[runAsNonRoot: true<br/>readOnlyRootFS: true<br/>capabilities: drop ALL]
+    end
+```
+
+### Security Scanning Pipeline
+
+```mermaid
+flowchart TB
+    subgraph "Trivy Scan"
+        IMG[Docker Image] --> SCAN1[Vulnerability DB]
+        SCAN1 --> CVE[CVE Database]
+        CVE --> SEV1[Severity Check]
+        SEV1 -->|HIGH/CRITICAL| FAIL1[❌ Fail]
+        SEV1 -->|Pass| PASS1[✅ Pass]
+    end
+    
+    subgraph "Checkov Scan"
+        TF[Terraform Files] --> SCAN2[Policy Engine]
+        SCAN2 --> POL[1000+ Policies]
+        POL --> SEV2[Policy Check]
+        SEV2 -->|Failed| FAIL2[❌ Fail]
+        SEV2 -->|Pass| PASS2[✅ Pass]
+    end
+    
+    PASS1 --> DEPLOY[Deploy]
+    PASS2 --> DEPLOY
+    
+    style FAIL1 fill:#ff6b6b,stroke:#c92a2a,color:#fff
+    style FAIL2 fill:#ff6b6b,stroke:#c92a2a,color:#fff
+    style DEPLOY fill:#51cf66,stroke:#2f9e44,color:#fff
+```
+
+### Container Security Architecture
+
+```mermaid
+flowchart TB
+    subgraph "Docker Image"
+        BASE[nginx:alpine]
+        BASE --> PKG[apk upgrade]
+        PKG --> USER[Non-root User<br/>UID 101]
+    end
+    
+    subgraph "Security Context"
+        USER --> ROOT[runAsNonRoot: true]
+        USER --> FS[readOnlyRootFilesystem: true]
+        USER --> ESC[allowPrivilegeEscalation: false]
+        USER --> CAP[capabilities: drop ALL]
+    end
+    
+    subgraph "Writable Volumes"
+        FS --> TMP[emptyDir: /tmp]
+        FS --> CACHE[emptyDir: /var/cache/nginx]
+        FS --> RUN[emptyDir: /var/run]
+    end
+    
+    style BASE fill:#339af0,stroke:#1971c2,color:#fff
+    style USER fill:#51cf66,stroke:#2f9e44,color:#fff
+    style ROOT fill:#51cf66,stroke:#2f9e44,color:#fff
+    style FS fill:#51cf66,stroke:#2f9e44,color:#fff
+    style ESC fill:#51cf66,stroke:#2f9e44,color:#fff
+    style CAP fill:#51cf66,stroke:#2f9e44,color:#fff
+```
+
+### Network Architecture
+
+```mermaid
+flowchart LR
+    subgraph "External"
+        CLIENT[Client Browser]
+    end
+    
+    subgraph "kind Cluster"
+        subgraph "ingress-nginx Namespace"
+            ING[Ingress Controller<br/>NodePort: 80/443]
+        end
+        
+        subgraph "secure-scan Namespace"
+            SVC[Service<br/>ClusterIP: 80]
+            POD[Pod<br/>Container: 80]
+        end
+    end
+    
+    CLIENT -->|secure-scan.local| ING
+    ING -->|Route| SVC
+    SVC -->|Select| POD
+    
+    style CLIENT fill:#ffd43b,stroke:#fab005
+    style ING fill:#ff6b6b,stroke:#c92a2a,color:#fff
+    style SVC fill:#339af0,stroke:#1971c2,color:#fff
+    style POD fill:#51cf66,stroke:#2f9e44,color:#fff
+```
+
+### CI/CD Pipeline Architecture
+
+```mermaid
+flowchart TB
+    subgraph "Phase 1: Security Scan"
+        A1[Checkout] --> A2[Build Image]
+        A2 --> A3[Trivy Scan]
+        A3 --> A4[Checkov scan]
+    end
+    
+    subgraph "Phase 2: Deploy"
+        A4 -->|Pass| B1[Checkout]
+        B1 --> B2[Build Image]
+        B2 --> B3[Create kind Cluster]
+        B3 --> B4[Install Ingress]
+        B4 --> B5[Load Image]
+        B5 --> B6[Terraform Init]
+        B6 --> B7[Terraform Plan]
+        B7 --> B8[Terraform Apply]
+    end
+    
+    subgraph "Phase 3: Verify"
+        B8 --> C1[Check Pods]
+        C1 --> C2[Check Services]
+        C2 --> C3[Check Ingress]
+        C3 --> C4[Log Results]
+    end
+    
+    A3 -->|Fail| BLOCK1[❌ Pipeline Blocked]
+    A4 -->|Fail| BLOCK2[❌ Pipeline Blocked]
+    
+    style BLOCK1 fill:#ff6b6b,stroke:#c92a2a,color:#fff
+    style BLOCK2 fill:#ff6b6b,stroke:#c92a2a,color:#fff
+    style A3 fill:#ffd43b,stroke:#fab005
+    style A4 fill:#ffd43b,stroke:#fab005
+    style B8 fill:#51cf66,stroke:#2f9e44,color:#fff
+```
+
+##  Tech Stack
 - **Site**: HTML5 + Vanilla CSS (Glassmorphism design)
 - **Server**: Nginx (Alpine-based, non-root)
 - **Infrastructure**: Terraform (Kubernetes Provider)
@@ -28,8 +224,9 @@ graph TD
 - **Security Scanners**:
     - [Trivy](https://github.com/aquasecurity/trivy): Vulnerability scanner for container images.
     - [Checkov](https://github.com/bridgecrewio/checkov): Static analysis for infrastructure as code.
+    - [kind](https://kind.sigs.k8s.io/): Kubernetes in Docker for CI/CD testing.
 
-## 🔒 Security Features
+##  Security Features
 ### Container Hardening
 - **Rootless**: Nginx runs as non-root user `nginx` (UID 101).
 - **Immutable**: Pipeline pins images to specific SHAs/Digests.
@@ -41,8 +238,9 @@ graph TD
 - **Resource Limits**: Enforced CPU and Memory quotas to prevent DoS.
 - **Probes**: Configured Liveness and Readiness probes for health monitoring.
 - **No Privilege**: Dropped all Linux capabilities and blocked privilege escalation.
+- **Writable Volumes**: `emptyDir` volumes for `/tmp`, `/var/cache/nginx`, `/var/run` to support nginx runtime needs.
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### Local Development
 1. **Build the Image**:
@@ -59,8 +257,36 @@ graph TD
    docker run --rm -v $(pwd)/terraform:/terraform bridgecrew/checkov -d /terraform
    ```
 
+3. **Deploy Locally**:
+   ```bash
+   # Create kind cluster
+   kind create cluster --name secure-scan-cluster
+   
+   # Load image
+   kind load docker-image secure-scan-site:latest --name secure-scan-cluster
+   
+   # Install ingress
+   kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+   
+   # Deploy with Terraform
+   cd terraform
+   terraform init
+   terraform apply -auto-approve -var="image_name=secure-scan-site:latest"
+   ```
+
 ### Deployment
 The project is configured to deploy via GitHub Actions. Only if all security gates pass will Terraform apply the changes to your Kubernetes cluster.
 
----
-Built with DevSecOps by Antigravity 🚀
+##  Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Overview](doc/01-overview.md) | Project purpose, goals, and philosophy |
+| [Architecture](doc/02-architecture.md) | System architecture with diagrams |
+| [Security Scanning](doc/03-security-scanning.md) | Trivy and Checkov deep dive |
+| [Terraform](doc/04-terraform.md) | Infrastructure as code explained |
+| [Workflow](doc/05-workflow.md) | CI/CD pipeline breakdown |
+| [Commands](doc/06-commands.md) | Complete command reference |
+| [Troubleshooting](doc/07-troubleshooting.md) | Common issues and solutions |
+
+
