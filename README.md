@@ -49,8 +49,8 @@ flowchart TB
     subgraph "Deployment"
         PASS1 --> DEPLOY{Both Pass?}
         PASS2 --> DEPLOY
-        DEPLOY -->|Yes| KIND[Create K8s Cluster<br/>(kind)]
-        KIND --> INGRESS[Install Ingress<br/>Controller]
+        DEPLOY -->|Yes| KIND[Create K8s Cluster using kind]
+        KIND --> INGRESS[Install Nginx Ingress Controller]
         INGRESS --> TF[Terraform Apply]
         TF --> K8S[Kubernetes Resources]
     end
@@ -76,9 +76,9 @@ flowchart LR
     end
     
     subgraph "Kubernetes Cluster"
-        ING[Ingress Controller<br/>nginx]
-        SVC[Service<br/>ClusterIP:80]
-        POD[Pod<br/>nginx:alpine]
+        ING[Ingress Controller - nginx]
+        SVC[Service - ClusterIP:80]
+        POD[Pod - nginx:alpine]
     end
     
     CLIENT -->|secure-scan.local| ING
@@ -86,7 +86,7 @@ flowchart LR
     SVC --> POD
     
     subgraph "Security Context"
-        POD --> SEC[runAsNonRoot: true<br/>readOnlyRootFS: true<br/>capabilities: drop ALL]
+        POD --> SEC[runAsNonRoot: true, readOnlyRootFS: true, capabilities: drop ALL]
     end
 ```
 
@@ -125,7 +125,7 @@ flowchart TB
     subgraph "Docker Image"
         BASE[nginx:alpine]
         BASE --> PKG[apk upgrade]
-        PKG --> USER[Non-root User<br/>UID 101]
+        PKG --> USER[Non-root User - UID 101]
     end
     
     subgraph "Security Context"
@@ -159,12 +159,12 @@ flowchart LR
     
     subgraph "kind Cluster"
         subgraph "ingress-nginx Namespace"
-            ING[Ingress Controller<br/>NodePort: 80/443]
+            ING[Ingress Controller - NodePort 80/443]
         end
         
         subgraph "secure-scan Namespace"
-            SVC[Service<br/>ClusterIP: 80]
-            POD[Pod<br/>Container: 80]
+            SVC[Service - ClusterIP 80]
+            POD[Pod - Container 80]
         end
     end
     
