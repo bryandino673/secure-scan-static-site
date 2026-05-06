@@ -274,19 +274,78 @@ flowchart TB
    terraform apply -auto-approve -var="image_name=secure-scan-site:latest"
    ```
 
+4. **Access the Application**:
+   ```bash
+   # Port-forward to the deployment (quickest way to access)
+   kubectl port-forward -n secure-scan deployment/secure-site 8080:80 &
+   
+   # Then open http://localhost:8080 in your browser
+   ```
+
+   ```bash
+   # Or access via Ingress (requires local DNS or /etc/hosts entry)
+   # Add to /etc/hosts: 127.0.0.1 secure-scan.local
+   kubectl port-forward -n ingress-nginx service/ingress-nginx-controller 80:80 &
+   
+   # Then open http://secure-scan.local
+   ```
+
+### View Running Services
+
+```bash
+# Check all resources in the secure-scan namespace
+kubectl get all -n secure-scan
+
+# Check pods and their status
+kubectl get pods -n secure-scan
+
+# Check services
+kubectl get svc -n secure-scan
+
+# Check ingress
+kubectl get ingress -n secure-scan
+
+# View pod logs
+kubectl logs -n secure-scan deployment/secure-site
+
+# View pod logs (follow mode - real-time)
+kubectl logs -n secure-scan deployment/secure-site -f
+
+# Describe a pod for detailed status/events
+kubectl describe pod -n secure-scan -l app=secure-site
+```
+
+### Destroy Resources (Cleanup)
+
+**Important:** Always clean up when you're done to free resources!
+
+```bash
+# Option 1: Destroy Terraform-managed resources only
+cd terraform
+terraform destroy -auto-approve -var="image_name=secure-scan-site:latest"
+
+# Option 2: Delete the entire namespace (removes all resources inside it)
+kubectl delete namespace secure-scan
+
+# Option 3: Delete the entire kind cluster (nuclear option)
+kind delete cluster --name secure-scan-cluster
+
+# Option 4: Delete the Ingress Controller namespace
+kubectl delete namespace ingress-nginx
+```
+
 ### Deployment
 The project is configured to deploy via GitHub Actions. Only if all security gates pass will Terraform apply the changes to your Kubernetes cluster.
 
-##  Documentation
+## 📚 Documentation
 
 | Document | Description |
 |----------|-------------|
-| [Overview](doc/01-overview.md) | Project purpose, goals, and philosophy |
-| [Architecture](doc/02-architecture.md) | System architecture with diagrams |
-| [Security Scanning](doc/03-security-scanning.md) | Trivy and Checkov deep dive |
-| [Terraform](doc/04-terraform.md) | Infrastructure as code explained |
-| [Workflow](doc/05-workflow.md) | CI/CD pipeline breakdown |
-| [Commands](doc/06-commands.md) | Complete command reference |
-| [Troubleshooting](doc/07-troubleshooting.md) | Common issues and solutions |
-
+| [Overview](docs/01-overview.md) | Project purpose, goals, and philosophy |
+| [Architecture](docs/02-architecture.md) | System architecture with diagrams |
+| [Security Scanning](docs/03-security-scanning.md) | Trivy and Checkov deep dive |
+| [Terraform](docs/04-terraform.md) | Infrastructure as code explained |
+| [Workflow](docs/05-workflow.md) | CI/CD pipeline breakdown |
+| [Commands](docs/06-commands.md) | Complete command reference |
+| [Troubleshooting](docs/07-troubleshooting.md) | Common issues and solutions |
 
