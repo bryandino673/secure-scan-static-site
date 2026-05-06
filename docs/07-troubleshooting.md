@@ -6,6 +6,34 @@ This document covers common issues and their solutions when working with this pr
 
 ## Deployment Issues
 
+### Pod Stuck in ImagePullBackOff or Pending State
+
+**Error:** Deployment hangs at "Still creating..." for many minutes.
+
+**Cause:** The `image_pull_policy` defaults to `"Always"`, causing Kubernetes to try to pull the image from Docker Hub. When using `kind load docker-image`, the image only exists locally in the kind cluster.
+
+**Solution:** Set `image_pull_policy = "Never"` in the container spec in [`terraform/main.tf`](../terraform/main.tf):
+
+```hcl
+container {
+  image             = var.image_name
+  name              = "secure-site"
+  image_pull_policy = "Never"  # Use local image, don't pull from registry
+}
+```
+
+**To fix a stuck deployment:**
+```bash
+# Cancel the running terraform apply (Ctrl+C)
+# Destroy the stuck resources
+terraform destroy -auto-approve -var="image_name=secure-scan-site:latest"
+
+# Re-apply with the fix
+terraform apply -auto-approve -var="image_name=secure-scan-site:latest"
+```
+
+---
+
 ### Pod Won't Start (0 Replicas Ready)
 
 **Error:**

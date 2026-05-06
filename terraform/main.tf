@@ -36,8 +36,9 @@ resource "kubernetes_deployment" "site" {
 
       spec {
         container {
-          image = var.image_name
-          name  = "secure-site"
+          image             = var.image_name
+          name              = "secure-site"
+          image_pull_policy = "Never"
 
           port {
             container_port = 80

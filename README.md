@@ -290,6 +290,10 @@ flowchart TB
    # Then open http://secure-scan.local
    ```
 
+### Image Pull Policy Note
+
+When using `kind load docker-image`, the image exists locally in the kind cluster but not in a remote registry. The Terraform config uses `image_pull_policy = "Never"` to ensure Kubernetes uses the local image instead of trying to pull from Docker Hub.
+
 ### View Running Services
 
 ```bash
