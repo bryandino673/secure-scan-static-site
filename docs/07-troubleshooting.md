@@ -6,6 +6,18 @@ This document covers common issues and their solutions when working with this pr
 
 ## Deployment Issues
 
+### nginx: bind() to 0.0.0.0:80 failed (13: Permission denied)
+
+**Error:** Pod crashes with `nginx: [emerg] bind() to 0.0.0.0:80 failed (13: Permission denied)`
+
+**Cause:** Non-root users (UID 101) cannot bind to privileged ports (< 1024). Since we run nginx as a non-root user for security, it cannot bind to port 80.
+
+**Solution:** We configured nginx to listen on port 8080 instead:
+- Created custom [`site/nginx.conf`](../site/nginx.conf) with `listen 8080;`
+- Updated [`Dockerfile`](../Dockerfile) to use the custom config and `EXPOSE 8080`
+- Updated Terraform to use `container_port = 8080` and `target_port = 8080`
+- Service still exposes port 80 externally, but routes to 8080 on the container
+
 ### Pod Stuck in ImagePullBackOff or Pending State
 
 **Error:** Deployment hangs at "Still creating..." for many minutes.

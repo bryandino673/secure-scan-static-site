@@ -41,7 +41,7 @@ resource "kubernetes_deployment" "site" {
           image_pull_policy = "Never"
 
           port {
-            container_port = 80
+            container_port = 8080
           }
 
           security_context {
@@ -68,7 +68,7 @@ resource "kubernetes_deployment" "site" {
           liveness_probe {
             http_get {
               path = "/"
-              port = 80
+              port = 8080
             }
             initial_delay_seconds = 3
             period_seconds        = 3
@@ -77,7 +77,7 @@ resource "kubernetes_deployment" "site" {
           readiness_probe {
             http_get {
               path = "/"
-              port = 80
+              port = 8080
             }
             initial_delay_seconds = 3
             period_seconds        = 3
@@ -129,7 +129,7 @@ resource "kubernetes_service" "site" {
     }
     port {
       port        = 80
-      target_port = 80
+      target_port = 8080
     }
     type = "ClusterIP"
   }
