@@ -62,7 +62,6 @@ jobs:
           directory: terraform/
           framework: terraform
           soft_fail: false
-          # CKV_K8S_15 skipped: We use image_pull_policy=Never because images are pre-loaded via 'kind load docker-image'
           check: CKV_K8S_10,CKV_K8S_11,CKV_K8S_12,CKV_K8S_14,CKV_K8S_21,CKV_K8S_23,CKV_K8S_24
 
       - name:  Debug - Checkov Results Summary
