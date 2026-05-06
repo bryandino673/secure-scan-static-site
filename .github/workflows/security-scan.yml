@@ -1,0 +1,54 @@
+name: Secure-Scan CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Build Docker image
+        run: docker build -t secure-scan-site:${{ github.sha }} .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'secure-scan-site:${{ github.sha }}'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'HIGH,CRITICAL'
+
+      - name: Run Checkov action
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform/
+          framework: terraform
+          soft_fail: false
+          check: HIGH,CRITICAL
+
+      - name: Setup Terraform
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: hashicorp/setup-terraform@v2
+
+      - name: Terraform Init
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: terraform init
+        working-directory: ./terraform
+
+      - name: Terraform Plan
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: terraform plan -var="image_name=secure-scan-site:${{ github.sha }}"
+        working-directory: ./terraform
+
+      - name: Terraform Apply
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: terraform apply -auto-approve -var="image_name=secure-scan-site:${{ github.sha }}"
+        working-directory: ./terraform
