@@ -278,7 +278,7 @@ flowchart TB
    ```bash
    # Port-forward to the deployment (quickest way to access)
    # Note: Container listens on port 8080 (non-root user can't bind to port 80)
-   kubectl port-forward -n secure-scan deployment/secure-site 8080:8080 &
+   kubectl port-forward -n secure-scan deployment/secure-site 8080:8080 
    
    # Then open http://localhost:8080 in your browser
    ```
